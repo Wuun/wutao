@@ -10,24 +10,11 @@ import (
 	"wutao/serializer"
 )
 
-var TODY_SUBGCRIBE_NUM *SUBGCRIBE_NUM
-
-type SUBGCRIBE_NUM struct {
-	mux   *sync.Mutex
-	Count int
-}
-
-func init() {
-	TODY_SUBGCRIBE_NUM = &SUBGCRIBE_NUM{
-		mux:   &sync.Mutex{},
-		Count: 0,
-	}
-}
-
 func ShopIDInformationScheduler() {
 	var (
 		done   chan interface{}
 		shopId chan serializer.CustomerInformation
+		w      *sync.WaitGroup
 	)
 	shopId = make(chan serializer.CustomerInformation, 30)
 	done = make(chan interface{})
@@ -35,44 +22,61 @@ func ShopIDInformationScheduler() {
 	if err != nil {
 		panic("转换初始爬取页面失败")
 	}
-	for i := 1; i < 9; i++ {
-		url := buildURL(conf.G_Conf.Shop, strconv.Itoa(i*100+startPage), strconv.Itoa(100))
-		fmt.Print(url + "\n")
-		shopIDS := parser.ShopIDParser(url)
-		go func() {
-			for i := 0; i < len(shopIDS); i++ {
-				select {
-				case shopId <- shopIDS[i]:
-					fmt.Println(i, "::爬取到用户shopid", shopIDS[i])
-				case <-done:
-					return
-				}
-			}
-		}()
 
-		go func() {
-			for {
-				select {
-				case in := <-shopId:
-					parser.SubscriptCustomerParser(in.ShopID)
-				case <-done:
-					return
-				}
-			}
-		}()
-	}
+	w = &sync.WaitGroup{}
+	w.Add(1)
 	go func() {
-		for {
-			time.Sleep(time.Millisecond * 500)
-			TODY_SUBGCRIBE_NUM.mux.Lock()
-			if TODY_SUBGCRIBE_NUM.Count >= 800 {
-				fmt.Println("今日任务已完成")
-				close(done)
-			}
+		defer w.Done()
+		for i := 1; i < 9; i++ {
+			w.Add(1)
+			url := buildURL(conf.G_Conf.Shop, strconv.Itoa(i*100+startPage), strconv.Itoa(100))
+			fmt.Print(url + "\n")
+			shopIDS := parser.ShopIDParser(url)
+			go func(done chan interface{}) {
+				defer w.Done()
+				for i := 0; i < len(shopIDS); i++ {
+					select {
+					case shopId <- shopIDS[i]:
+						fmt.Println(i, "::爬取到用户shopid", shopIDS[i])
+					case <-done:
+						return
+					}
+				}
+			}(done)
+		}
+		time.Sleep(time.Second * 3)
+		close(done)
+	}()
+
+	w.Add(1)
+	go func() {
+		defer w.Done()
+		for i := 0; i < 5; i++ {
+			w.Add(1)
+			go func(done chan interface{}) {
+				defer w.Done()
+				for {
+					select {
+					case in := <-shopId:
+						parser.SubscriptCustomerParser(in.ShopID)
+					case <-done:
+						return
+					}
+				}
+			}(done)
 		}
 	}()
-	<-done
+
+	w.Wait()
+	fmt.Println("***********************************************")
+	fmt.Println("***********************************************")
+	fmt.Println("***********************************************")
+	fmt.Println("   ")
 	fmt.Print("今天结束于：", startPage+800, "请记住哦。")
+	fmt.Println("   ")
+	fmt.Println("***********************************************")
+	fmt.Println("***********************************************")
+	fmt.Println("***********************************************")
 }
 
 func buildURL(shop string, offset string, limit string) string {

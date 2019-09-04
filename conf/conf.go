@@ -20,7 +20,7 @@ func init() {
 	)
 	flag.StringVar(&shop, "shop", "2390664", "请输入商店的id")
 	flag.StringVar(&cookie, "cookie", cookieDefault, "请更新cookie")
-	flag.StringVar(&startPage, "start-page", "1900", "要开始爬的页面")
+	flag.StringVar(&startPage, "start-page", "3200", "要开始爬的页面")
 	flag.Parse()
 	G_Conf = &Conf{
 		Shop:      shop,
